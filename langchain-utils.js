@@ -20,7 +20,7 @@ const callGeminiAPI = async (question, context, filePath) => {
                 text: context,
             }],
         }];
-        const pdfBuffer = fs.readFileSync(filePath); // Use the provided file path for the PDF
+        const pdfBuffer = fs.readFileSync("./uploads/upload.pdf"); // Replace with your PDF file
         const prompt = question;
 
         const pdf = {
@@ -33,8 +33,12 @@ const callGeminiAPI = async (question, context, filePath) => {
         // Log or send your data
         console.log({ question, pdf });
         const result = await model.generateContent([prompt, pdf]);
+        // console.log("Contents to be processed by Gemini:", contents);
+        console.log("dsfa",result.response.text());
 
-        // Log the response from Gemini
+        // Use the appropriate method to generate the response (check API documentation)
+        // const response = await model.generateContent([question,contents]);  // Use chat() instead of generate()
+
         console.log("Response from Gemini:", result.response.text());
         return result.response.text() || "No answer found";
 
@@ -49,15 +53,16 @@ const processQuery = async (filePath, question) => {
   
     const context = docs.map(doc => doc.pageContent).join(" ");
   
-    const answer = await callGeminiAPI(question, context, filePath);
+    const answer = await callGeminiAPI(question, context);
     return answer;
-};
+  };
   
 
 (async () => {
     try {
         const filePath = "./uploads/upload.pdf"; // Replace with the actual file path
-        const question = "Who is this letter of authorization by?"; // Example question
+        // const question = "GST?"; // Example question
+        const question = "who is this letter of authorization by?"; // Example question
         const response = await processQuery(filePath, question);
         console.log("Response from Gemini:", response);
     } catch (error) {
