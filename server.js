@@ -3,8 +3,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
-const libre = require('libreoffice-convert');
-libre.convertAsync = require('util').promisify(libre.convert);
+const docxConverter = require('docx-pdf');  // Import the docx-pdf module
 const { processQuery } = require('./langchain-utils');
 const { extractPDFText } = require('./pdf-parser');
 
@@ -39,15 +38,17 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Function to convert DOCX to PDF using libreoffice-convert
+// Function to convert DOCX to PDF using docx-pdf
 async function convertDocxToPDF(inputPath, outputPath) {
-  try {
-    const docxBuffer = fs.readFileSync(inputPath); // Read the .docx file into a buffer
-    const pdfBuffer = await libre.convertAsync(docxBuffer, '.pdf', undefined); // Convert to PDF format
-    fs.writeFileSync(outputPath, pdfBuffer); // Write the converted buffer to the output file
-  } catch (error) {
-    throw new Error(`Error converting DOCX to PDF: ${error.message}`);
-  }
+  return new Promise((resolve, reject) => {
+    docxConverter(inputPath, outputPath, function (err, result) {
+      if (err) {
+        reject(new Error(`Error converting DOCX to PDF: ${err.message}`));
+      } else {
+        resolve(result);
+      }
+    });
+  });
 }
 
 // Upload file endpoint
@@ -76,7 +77,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       if (fs.existsSync(pdfFilePath)) {
         fs.unlinkSync(pdfFilePath); // Remove existing PDF
       }
-      await convertDocxToPDF(originalFilePath, pdfFilePath);
+      await convertDocxToPDF(originalFilePath, pdfFilePath); // Use the docx-pdf conversion
       fs.unlinkSync(originalFilePath); // Remove the original .docx file after conversion
     } else {
       // Reject unsupported file types
@@ -128,8 +129,8 @@ app.post('/query', async (req, res) => {
 });
 
 // Serve static files
-app.use('./uploads', express.static(uploadDir));
-app.use('./extracts', express.static(extractsDir));
+app.use('/uploads', express.static(uploadDir));
+app.use('/extracts', express.static(extractsDir));
 
 // Start the server
 app.listen(PORT, () => {
