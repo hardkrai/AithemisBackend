@@ -3,7 +3,7 @@ const multer = require("multer");
 const fs = require("fs").promises; // Use the promise-based API
 const path = require("path");
 const cors = require("cors");
-const mammoth = require("mammoth"); // For extracting text from DOCX files
+const mammoth = require("mammoth/mammoth.browser"); // For extracting text from DOCX files
 const { processQuery } = require("./langchain-utils");
 const { extractPDFText } = require("./pdf-parser");
 
