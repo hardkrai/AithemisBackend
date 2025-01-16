@@ -19,6 +19,7 @@
     "@langchain/core": "^0.3.30",
     "@langchain/openai": "^0.3.17",
     "cors": "^2.8.5",
+    "docx-pdf": "^0.0.1",
     "dotenv": "^16.0.3",
     "express": "^4.21.2",
     "fs-extra": "^11.3.0",
