@@ -1,21 +1,26 @@
-const express = require('express');
-const multer = require('multer');
-const fs = require('fs') // Use the promise-based API
-const path = require('path');
-const cors = require('cors');
-const { processQuery } = require('./langchain-utils');
-const { extractPDFText } = require('./pdf-parser');
+const express = require("express");
+const multer = require("multer");
+const fs = require("fs").promises; // Use the promise-based API
+const path = require("path");
+const cors = require("cors");
+const mammoth = require("mammoth"); // For extracting text from DOCX files
+const { processQuery } = require("./langchain-utils");
+const { extractPDFText } = require("./pdf-parser");
 
 const app = express();
-const PORT = process.env.PORT || 5001; // Use PORT from environment variables or default to 5001
+const PORT = process.env.PORT || 5001;
 
 // Define upload directory
-const uploadDir = path.join(__dirname, 'uploads');
+const uploadDir = path.join(__dirname, "uploads");
 
 // Create uploads folder if it doesn't exist
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
+(async () => {
+  try {
+    await fs.mkdir(uploadDir, { recursive: true });
+  } catch (error) {
+    console.error("Failed to create upload directory:", error);
+  }
+})();
 
 // Enable CORS
 app.use(cors());
@@ -27,50 +32,68 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    cb(null, 'upload.pdf'); // Always save as "upload.pdf"
+    const extension = path.extname(file.originalname);
+    cb(null, `upload${extension}`); // Save with original extension
   },
 });
 
 // Initialize multer with the custom storage configuration
 const upload = multer({ storage });
 
-// Upload PDF endpoint
-app.post('/upload', upload.single('file'), async (req, res) => {
+// Helper to extract text from DOCX files
+const extractDocxText = async (filePath) => {
+  try {
+    const result = await mammoth.extractRawText({ path: filePath });
+    return result.value;
+  } catch (error) {
+    console.error("Error extracting DOCX text:", error);
+    return null;
+  }
+};
+
+// Upload endpoint
+app.post("/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
 
   if (!file) {
-    return res.status(400).json({ error: 'No file uploaded' });
+    return res.status(400).json({ error: "No file uploaded" });
   }
 
-  // Ensure the file is a PDF
-  if (path.extname(file.originalname).toLowerCase() !== '.pdf') {
+  const fileExtension = path.extname(file.originalname).toLowerCase();
+
+  if (![".pdf", ".docx"].includes(fileExtension)) {
     // Delete the invalid file
     await fs.unlink(file.path);
-    return res.status(400).json({ error: 'Only PDF files are allowed' });
+    return res.status(400).json({ error: "Only PDF and DOCX files are allowed" });
   }
 
-  const filePath = path.join(uploadDir, 'upload.pdf');
+  const filePath = path.join(uploadDir, `upload${fileExtension}`);
 
-  // Extract text from the PDF
   try {
-    const pdfText = await extractPDFText(filePath);
+    let extractedText;
 
-    if (!pdfText) {
-      return res.status(500).json({ error: 'Failed to extract text from PDF' });
+    if (fileExtension === ".pdf") {
+      extractedText = await extractPDFText(filePath);
+    } else if (fileExtension === ".docx") {
+      extractedText = await extractDocxText(filePath);
+    }
+
+    if (!extractedText) {
+      return res.status(500).json({ error: "Failed to extract text from the file" });
     }
 
     return res.status(200).json({
-      message: 'File uploaded and processed successfully',
-      filePath: `/uploads/upload.pdf`, // Public path for the uploaded file
-      textExtracted: pdfText.slice(0, 500), // Return a preview of the text
+      message: "File uploaded and processed successfully",
+      filePath: `/uploads/upload${fileExtension}`,
+      textExtracted: extractedText.slice(0, 500), // Return a preview of the text
     });
   } catch (error) {
-    console.error('Error processing PDF:', error);
-    return res.status(500).json({ error: 'Failed to process the file' });
+    console.error("Error processing file:", error);
+    return res.status(500).json({ error: "Failed to process the file" });
   }
 });
 
-// Query PDF content endpoint
+// Query endpoint (unchanged)
 app.post("/query", async (req, res) => {
   try {
     const { filePath, question } = req.body;
@@ -79,9 +102,7 @@ app.post("/query", async (req, res) => {
       return res.status(400).json({ error: "File path and question are required." });
     }
 
-    // Process the query using langchain-utils
     const answer = await processQuery(filePath, question);
-
     res.status(200).json({ answer });
   } catch (error) {
     console.error("Error processing query:", error);
@@ -90,7 +111,7 @@ app.post("/query", async (req, res) => {
 });
 
 // Serve static files from the uploads directory
-app.use('/uploads', express.static(uploadDir));
+app.use("/uploads", express.static(uploadDir));
 
 // Start the server
 app.listen(PORT, () => {
